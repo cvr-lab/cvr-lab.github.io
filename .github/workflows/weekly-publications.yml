@@ -56,7 +56,7 @@ jobs:
       
       - name: Normalize publication metadata
         run: |
-          python scripts/publications/migrate_frontmatter.py
+          python scripts/publications/migrate_format_publications.py
 
       - name: Show report in the job summary
         run: cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
