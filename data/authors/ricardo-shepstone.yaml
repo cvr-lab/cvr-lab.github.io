@@ -2,35 +2,33 @@ schema: hugoblox/author/v1
 slug: ricardo-shepstone
 is_owner: true
 name: 
-  display: 
-  given: 
-  family: 
-role: 
-bio: 
+  display: Ricardo Shepstone
+  given: Ricardo
+  family: Shepstone Aramburu
+role: PhD student and researcher
+bio: PhD student and researcher at University of Granada.
 affiliations:
 - name: Universidad de Granada
   url: https://www.ugr.es/
 links:
 - icon: at-symbol
-  url: mailto:sromero@ugr.es
-- icon: academicons/google-scholar
-  url: https://scholar.google.es/citations?user=75jhBGQAAAAJ&hl=ca
+  url: mailto:rshepstone@ugr.es
+- icon: brands/linkedin
+  url: www.linkedin.com/in/ricardo-shepstone-aramburu-6a2079225
 interests:
-- Robotics
-- Neuromorphic
-- SLAM
+- Computer Vision
+- Deep Learning
+- Machine Learning
 - Drones
-- Autonomous Navigation
+- 3D Vision and Reconstruction
+- Object Detection and Tracking
 education:
-- degree: PhD in Computer Engineering
+- degree: MSc in Data Science and Computer Engineering
   institution: Universidad de Granada
-  end: '2006-12-31'
-- degree: MSc Neuroscience
-  institution: Universidad Pablo de Olavide
-  end: '2007-12-31'
-- degree: BSc in Computer Engineering
+  end: '2024-12-31'
+- degree: BSc in Industrial Electronics Engineering
   institution: Universidad de Granada
-  end: '1998-12-31'
+  end: '2021-12-31'
 user_groups:
 - Researchers
 weight: 1
