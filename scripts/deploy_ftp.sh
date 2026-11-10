@@ -9,6 +9,8 @@
 #   2. Si no hay cambios desde el último despliegue, termina.
 #   3. Construye la web con la dirección final y genera el buscador.
 #   4. Sube el resultado por FTPS con lftp.
+#   5. Comprueba por HTTP que los .js, .css y .json se ven IGUAL que en local
+#      (detecta archivos vacíos o cortados). Si algo no coincide, falla y se reintenta.
 #
 # Uso:
 #   scripts/deploy-ugr.sh              despliega si hay cambios
@@ -33,7 +35,7 @@ for arg in "$@"; do
   case "$arg" in
     --force)   FORCE=1 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "Opción desconocida: $arg" >&2; exit 2 ;;
   esac
 done
@@ -56,7 +58,7 @@ for v in REPO_URL SITE_URL FTPS_HOST FTPS_USER FTPS_REMOTE_DIR; do
 done
 BRANCH="${BRANCH:-main}"
 FTPS_PORT="${FTPS_PORT:-21}"
-# La contraseña (si no usas clave SSH) puede ir en un archivo aparte (FTPS_PASSWORD_FILE)
+# La contraseña puede ir en un archivo aparte (FTPS_PASSWORD_FILE, lo recomendable)
 # o, como segunda opción, en FTPS_PASSWORD dentro de la configuración.
 if [ -n "${FTPS_PASSWORD_FILE:-}" ]; then
   [ -f "$FTPS_PASSWORD_FILE" ] || die "No existe $FTPS_PASSWORD_FILE"
@@ -65,7 +67,7 @@ if [ -n "${FTPS_PASSWORD_FILE:-}" ]; then
 fi
 
 # ── Programas necesarios ─────────────────────────────────────────────────────
-for c in git node npm hugo lftp flock; do
+for c in git node npm hugo lftp flock curl sha256sum; do
   command -v "$c" >/dev/null 2>&1 || die "Falta el programa '$c' (en cron, revisa la variable PATH)."
 done
 HUGO_OUT="$(hugo version)"
@@ -118,13 +120,15 @@ log "Web construida: $N_FILES archivos."
 # ── Subida por FTPS ──────────────────────────────────────────────────────────
 # Las órdenes de lftp se escriben en un archivo temporal que solo lee tu usuario
 # y se borra al terminar. Así la contraseña no aparece en la lista de procesos.
-
 lftp_quote() {
   local v="${1//\\/\\\\}"
   printf '"%s"' "${v//\"/\\\"}"
 }
 
-MIRROR="mirror --reverse --verbose --parallel=4"
+# Subidas simultáneas: 1 es lo más seguro. Varias conexiones FTPS a la vez hacen que
+# algunos servidores corten transferencias (archivos vacíos o a medias).
+# --transfer-all vuelve a subir todo, así se reparan los archivos rotos de intentos anteriores.
+MIRROR="mirror --reverse --verbose --parallel=1 --transfer-all"
 [ "${FTPS_DELETE:-no}" = "yes" ] && MIRROR="$MIRROR --delete"
 [ "$DRY" -eq 1 ] && MIRROR="$MIRROR --dry-run"
 
@@ -138,7 +142,7 @@ trap 'rm -f "$LFTP_CMDS"' EXIT
   echo "set net:reconnect-interval-base 5"
   echo "set xfer:clobber yes"
 
-  # Configuración FTPS explícito
+  # FTPS explícito: se negocia TLS y se cifran también los datos
   echo "set ftp:ssl-allow yes"
   echo "set ftp:ssl-force yes"
   echo "set ftp:ssl-protect-data yes"
@@ -148,18 +152,42 @@ trap 'rm -f "$LFTP_CMDS"' EXIT
   echo "set ssl:verify-certificate yes"
 
   echo "open -p ${FTPS_PORT:-21} -u $(lftp_quote "$FTPS_USER,${FTPS_PASSWORD:-}") ftp://$FTPS_HOST"
-
   echo "$MIRROR public/ $(lftp_quote "$FTPS_REMOTE_DIR")"
   echo "bye"
 } > "$LFTP_CMDS"
 
 log "Subiendo por FTPS a $FTPS_USER@$FTPS_HOST:$FTPS_REMOTE_DIR$( [ "$DRY" -eq 1 ] && echo ' (simulación)' )…"
-
 lftp -f "$LFTP_CMDS"
 
 if [ "$DRY" -eq 1 ]; then
   log "Simulación terminada: no se ha subido nada."
   exit 0
+fi
+
+# ── Verificación: lo que sirve la web debe ser idéntico a lo construido ──────
+# Se piden por HTTP los .js, .css y .json y se compara su huella con la del archivo local.
+# Un archivo vacío o cortado en el servidor hace que el navegador bloquee la web.
+if [ "${VERIFY:-yes}" = "yes" ]; then
+  log "Verificando los archivos publicados en $SITE_URL…"
+  cd "$CLONE_DIR/public"
+  BAD=0; CHECKED=0
+  while IFS= read -r rel; do
+    [ "$CHECKED" -lt "${VERIFY_MAX:-150}" ] || break
+    CHECKED=$((CHECKED + 1))
+    LOCAL_SUM="$(sha256sum < "$rel" | cut -d' ' -f1)"
+    REMOTE_SUM="$(curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "${SITE_URL}${rel}" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+    if [ "$LOCAL_SUM" != "$REMOTE_SUM" ]; then
+      log "  NO COINCIDE: $rel (local: $(wc -c < "$rel") bytes)"
+      BAD=$((BAD + 1))
+    fi
+  done < <(find . -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' \) | sed 's#^\./##' | sort)
+  cd "$CLONE_DIR"
+  if [ "$BAD" -ne 0 ]; then
+    log "Pistas: si por FTPS el archivo tiene el tamaño correcto pero por HTTP se sirve mal, la causa"
+    log "es una caché del servidor web (pide que la vacíen). Si ya está mal por FTPS, es la subida."
+    die "$BAD de $CHECKED archivos no coinciden con los publicados."
+  fi
+  log "Verificación correcta ($CHECKED archivos comprobados)."
 fi
 
 echo "$HEAD_SHA" > "$LAST_FILE"
