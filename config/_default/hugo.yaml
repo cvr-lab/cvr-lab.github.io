@@ -6,7 +6,7 @@
 # Website name (set in params.yaml under hugoblox.branding.name)
 title: ''
 # Website URL
-baseURL: 'https://ugr.es/~cvrlab'
+baseURL: 'https://www.ugr.es/~cvrlab/'
 
 ############################
 ## LANGUAGE

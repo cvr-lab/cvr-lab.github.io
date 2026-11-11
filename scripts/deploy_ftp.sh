@@ -9,13 +9,15 @@
 #   2. Si no hay cambios desde el último despliegue, termina.
 #   3. Construye la web con la dirección final y genera el buscador.
 #   4. Sube el resultado por FTPS con lftp.
-#   5. Comprueba por HTTP que los .js, .css y .json se ven IGUAL que en local
-#      (detecta archivos vacíos o cortados). Si algo no coincide, falla y se reintenta.
+#   5. Comprueba por HTTP que TODOS los archivos (páginas, imágenes, .js, .css…) se ven
+#      IGUAL que en local. Si alguno falta, está vacío o cortado, falla y se reintenta.
 #
 # Uso:
-#   scripts/deploy-ugr.sh              despliega si hay cambios
-#   scripts/deploy-ugr.sh --force      despliega aunque no haya cambios
-#   scripts/deploy-ugr.sh --dry-run    construye y muestra qué subiría, sin subir nada
+#   scripts/deploy-ugr.sh               despliega si hay cambios
+#   scripts/deploy-ugr.sh --force       despliega aunque no haya cambios
+#   scripts/deploy-ugr.sh --dry-run     construye y muestra qué subiría, sin subir nada
+#   scripts/deploy-ugr.sh --verify-only NO construye ni sube: solo compara lo publicado en la
+#                                       web con la última construcción (lista lo que falla)
 #
 # Configuración: ~/.config/cvr-web-deploy.env  (ver scripts/deploy-ugr.env.example)
 set -euo pipefail
@@ -31,11 +33,13 @@ MIN_FILES="${MIN_FILES:-50}"          # si la web construida tiene menos archivo
 
 FORCE=0
 DRY=0
+VERIFY_ONLY=0
 for arg in "$@"; do
   case "$arg" in
-    --force)   FORCE=1 ;;
-    --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    --force)       FORCE=1 ;;
+    --dry-run)     DRY=1 ;;
+    --verify-only) VERIFY_ONLY=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "Opción desconocida: $arg" >&2; exit 2 ;;
   esac
 done
@@ -43,6 +47,49 @@ done
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 trap 'log "El despliegue ha fallado (línea $LINENO). Se reintentará en la próxima ejecución."' ERR
+
+# ── Verificación por HTTP ────────────────────────────────────────────────────
+# Codifica una ruta para usarla en una URL (espacios, tildes, etc.).
+urlenc() {
+  local LC_ALL=C s="$1" out="" c i
+  for (( i = 0; i < ${#s}; i++ )); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_/-]) out+="$c" ;;
+      *) out+="$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# Compara cada archivo de public/ con lo que sirve la web. Deja el resultado en BAD y CHECKED.
+# VERIFY_SCOPE=all (por defecto) revisa todo; VERIFY_SCOPE=assets solo .js, .css y .json.
+verify_site() {
+  local pub="$CLONE_DIR/public" scope="${VERIFY_SCOPE:-all}" max="${VERIFY_MAX:-100000}"
+  local rel local_sum web_sum web_bytes tmp types
+  tmp="$(mktemp)"; types="$(mktemp)"
+  BAD=0; CHECKED=0
+  log "Verificando por HTTP los archivos publicados en $SITE_URL (puede tardar un par de minutos)…"
+  while IFS= read -r rel; do
+    [ "$CHECKED" -lt "$max" ] || break
+    CHECKED=$((CHECKED + 1))
+    local_sum="$(sha256sum < "$pub/$rel" | cut -d' ' -f1)"
+    if curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' -o "$tmp" "${SITE_URL}$(urlenc "$rel")" 2>/dev/null; then
+      web_sum="$(sha256sum < "$tmp" | cut -d' ' -f1)"; web_bytes="$(wc -c < "$tmp") bytes"
+    else
+      web_sum="-"; web_bytes="no responde"
+    fi
+    if [ "$local_sum" != "$web_sum" ]; then
+      log "  NO COINCIDE: $rel (local: $(wc -c < "$pub/$rel") bytes, web: $web_bytes)"
+      BAD=$((BAD + 1)); echo "${rel##*.}" >> "$types"
+    fi
+  done < <(cd "$pub" && if [ "$scope" = "all" ]; then find . -type f; \
+           else find . -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' \); fi | sed 's#^\./##' | sort)
+  if [ "$BAD" -gt 0 ]; then
+    log "Resumen por tipo de archivo: $(sort "$types" | uniq -c | sort -rn | awk '{printf "%s: %s  ", $2, $1}')"
+  fi
+  rm -f "$tmp" "$types"
+}
 
 # ── Configuración ────────────────────────────────────────────────────────────
 # Los archivos con datos de acceso solo deben poder leerlos tu usuario.
@@ -58,6 +105,22 @@ for v in REPO_URL SITE_URL FTPS_HOST FTPS_USER FTPS_REMOTE_DIR; do
 done
 BRANCH="${BRANCH:-main}"
 FTPS_PORT="${FTPS_PORT:-21}"
+
+# Modo --verify-only: no construye ni sube nada; solo compara la web publicada con la
+# última construcción guardada en el clon de despliegue.
+if [ "$VERIFY_ONLY" -eq 1 ]; then
+  for c in curl sha256sum; do command -v "$c" >/dev/null 2>&1 || die "Falta el programa '$c'."; done
+  [ -d "$CLONE_DIR/public" ] || die "No hay ninguna construcción en $CLONE_DIR/public (ejecuta antes el despliegue o --dry-run)."
+  mkdir -p "$STATE_DIR"
+  verify_site
+  if [ "$BAD" -ne 0 ]; then
+    log "$BAD de $CHECKED archivos NO coinciden con lo publicado."
+    log "Para volver a subir solo esos archivos:  scripts/upload-files.sh --from-log <archivo con estas líneas>"
+    exit 1
+  fi
+  log "Todo coincide ($CHECKED archivos comprobados)."
+  exit 0
+fi
 # La contraseña puede ir en un archivo aparte (FTPS_PASSWORD_FILE, lo recomendable)
 # o, como segunda opción, en FTPS_PASSWORD dentro de la configuración.
 if [ -n "${FTPS_PASSWORD_FILE:-}" ]; then
@@ -67,7 +130,7 @@ if [ -n "${FTPS_PASSWORD_FILE:-}" ]; then
 fi
 
 # ── Programas necesarios ─────────────────────────────────────────────────────
-for c in git node npm hugo lftp flock curl sha256sum; do
+for c in git node npm hugo python3 flock curl sha256sum; do
   command -v "$c" >/dev/null 2>&1 || die "Falta el programa '$c' (en cron, revisa la variable PATH)."
 done
 HUGO_OUT="$(hugo version)"
@@ -117,47 +180,166 @@ N_FILES="$(find public -type f | wc -l)"
 [ "$N_FILES" -ge "$MIN_FILES" ] || die "La web construida solo tiene $N_FILES archivos (mínimo $MIN_FILES)."
 log "Web construida: $N_FILES archivos."
 
-# ── Subida por FTPS ──────────────────────────────────────────────────────────
-# Las órdenes de lftp se escriben en un archivo temporal que solo lee tu usuario
-# y se borra al terminar. Así la contraseña no aparece en la lista de procesos.
-lftp_quote() {
-  local v="${1//\\/\\\\}"
-  printf '"%s"' "${v//\"/\\\"}"
+
+# ── Subida por FTPS mediante cURL ────────────────────────────────────────────
+
+# Comprobamos que el directorio remoto sea relativo al directorio personal.
+REMOTE_BASE="${FTPS_REMOTE_DIR#/}"
+REMOTE_BASE="${REMOTE_BASE%/}"
+
+case "$REMOTE_BASE" in
+  ""|..|../*|*/../*|*/..)
+    die "FTPS_REMOTE_DIR debe ser una ruta relativa válida, por ejemplo public_html/."
+    ;;
+esac
+
+# Configuración privada de cURL. Evitamos poner la contraseña en los argumentos
+# del proceso, donde podría aparecer en ps.
+curl_config_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
 }
 
-# Subidas simultáneas: 1 es lo más seguro. Varias conexiones FTPS a la vez hacen que
-# algunos servidores corten transferencias (archivos vacíos o a medias).
-# --transfer-all vuelve a subir todo, así se reparan los archivos rotos de intentos anteriores.
-MIRROR="mirror --reverse --verbose --parallel=1 --transfer-all"
-[ "${FTPS_DELETE:-no}" = "yes" ] && MIRROR="$MIRROR --delete"
-[ "$DRY" -eq 1 ] && MIRROR="$MIRROR --dry-run"
+CURL_CONFIG=""
 
-LFTP_CMDS="$(umask 077; mktemp "$STATE_DIR/lftp.XXXXXX")"
-trap 'rm -f "$LFTP_CMDS"' EXIT
+if [ "$DRY" -eq 0 ]; then
+  CURL_CONFIG="$(umask 077; mktemp "$STATE_DIR/curl.XXXXXX")"
 
-{
-  echo "set cmd:fail-exit yes"
-  echo "set net:max-retries 3"
-  echo "set net:timeout 30"
-  echo "set net:reconnect-interval-base 5"
-  echo "set xfer:clobber yes"
+  {
+    printf 'user = "%s:%s"\n' \
+      "$(curl_config_escape "$FTPS_USER")" \
+      "$(curl_config_escape "${FTPS_PASSWORD:-}")"
+  } > "$CURL_CONFIG"
 
-  # FTPS explícito: se negocia TLS y se cifran también los datos
-  echo "set ftp:ssl-allow yes"
-  echo "set ftp:ssl-force yes"
-  echo "set ftp:ssl-protect-data yes"
-  echo "set ftp:passive-mode true"
+  trap 'rm -f "$CURL_CONFIG"' EXIT
+fi
 
-  # Verificación del certificado TLS
-  echo "set ssl:verify-certificate yes"
+# Convierte rutas locales en rutas URL válidas, conservando los separadores.
+url_encode_path() {
+  python3 -c \
+    'import sys; from urllib.parse import quote; print(quote(sys.argv[1], safe="/"))' \
+    "$1"
+}
 
-  echo "open -p ${FTPS_PORT:-21} -u $(lftp_quote "$FTPS_USER,${FTPS_PASSWORD:-}") ftp://$FTPS_HOST"
-  echo "$MIRROR public/ $(lftp_quote "$FTPS_REMOTE_DIR")"
-  echo "bye"
-} > "$LFTP_CMDS"
+# URL relativa al directorio personal FTP:
+# /./public_html equivale a entrar en public_html desde el home FTP.
+remote_url() {
+  local relative_path="$1"
+  local encoded_path
 
-log "Subiendo por FTPS a $FTPS_USER@$FTPS_HOST:$FTPS_REMOTE_DIR$( [ "$DRY" -eq 1 ] && echo ' (simulación)' )…"
-lftp -f "$LFTP_CMDS"
+  encoded_path="$(url_encode_path "$relative_path")"
+
+  printf 'ftp://%s:%s/./%s/%s' \
+    "$FTPS_HOST" "$FTPS_PORT" "$REMOTE_BASE" "$encoded_path"
+}
+
+# Comprueba el tamaño real del archivo almacenado en el FTP mediante SIZE.
+remote_size() {
+  local url="$1"
+  local headers
+
+  if ! headers="$(
+    curl --disable \
+      --silent --show-error --fail \
+      --ssl-reqd --ftp-pasv \
+      --connect-timeout 20 --max-time 60 \
+      --config "$CURL_CONFIG" \
+      --head "$url" 2>/dev/null
+  )"; then
+    return 1
+  fi
+
+  printf '%s\n' "$headers" |
+    awk 'tolower($1) == "content-length:" {
+      gsub("\r", "", $2)
+      print $2
+      exit
+    }'
+}
+
+upload_one() {
+  local relative_path="$1"
+  local local_file="$CLONE_DIR/public/$relative_path"
+  local url local_size server_size
+  local attempt max_attempts
+
+  max_attempts="${FTPS_RETRIES:-3}"
+  local_size="$(stat -c '%s' "$local_file")"
+  url="$(remote_url "$relative_path")"
+
+  for ((attempt=1; attempt<=max_attempts; attempt++)); do
+    log "Subiendo ($attempt/$max_attempts): $relative_path ($local_size bytes)"
+
+    if curl --disable \
+      --silent --show-error --fail \
+      --ssl-reqd --ftp-pasv --ftp-create-dirs \
+      --connect-timeout 20 --max-time 300 \
+      --config "$CURL_CONFIG" \
+      --upload-file "$local_file" \
+      "$url"; then
+
+      if server_size="$(remote_size "$url")" &&
+         [ -n "$server_size" ] &&
+         [ "$server_size" = "$local_size" ]; then
+
+        log "  OK: $relative_path ($server_size bytes)"
+        return 0
+      fi
+
+      log "  ERROR: tamaño remoto incorrecto o no verificable para $relative_path"
+      log "  Local: $local_size bytes | Remoto: ${server_size:-no disponible}"
+    else
+      log "  ERROR: cURL no pudo subir $relative_path"
+    fi
+
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      log "  Reintentando en 3 segundos..."
+      sleep 3
+    fi
+  done
+
+  log "ERROR DEFINITIVO: no se pudo verificar $relative_path"
+  return 1
+}
+
+# En modo simulación no se conecta ni modifica el servidor.
+if [ "$DRY" -eq 1 ]; then
+  log "Simulación: archivos que se subirían a $FTPS_HOST/$REMOTE_BASE/"
+
+  while IFS= read -r -d '' file; do
+    printf '  %s\n' "${file#./}"
+  done < <(cd "$CLONE_DIR/public" && find . -type f -print0)
+
+  log "Simulación terminada: no se ha subido nada."
+  exit 0
+fi
+
+# Subimos todos los archivos secuencialmente.
+UPLOAD_COUNT=0
+UPLOAD_FAILED=0
+
+log "Iniciando subida FTPS a $FTPS_HOST:$FTPS_PORT/$REMOTE_BASE/"
+log "Verificación individual mediante FTP SIZE activada."
+
+while IFS= read -r -d '' file; do
+  relative_path="${file#./}"
+
+  if upload_one "$relative_path"; then
+    UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+  else
+    UPLOAD_FAILED=$((UPLOAD_FAILED + 1))
+    break
+  fi
+done < <(cd "$CLONE_DIR/public" && find . -type f -print0 | sort -z)
+
+if [ "$UPLOAD_FAILED" -ne 0 ]; then
+  die "Subida incompleta. Se han verificado $UPLOAD_COUNT archivos y ha fallado al menos uno. No se marcará el commit como publicado."
+fi
+
+log "Subida FTPS completada: $UPLOAD_COUNT archivos verificados."
+# ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 if [ "$DRY" -eq 1 ]; then
   log "Simulación terminada: no se ha subido nada."
@@ -165,23 +347,9 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 # ── Verificación: lo que sirve la web debe ser idéntico a lo construido ──────
-# Se piden por HTTP los .js, .css y .json y se compara su huella con la del archivo local.
-# Un archivo vacío o cortado en el servidor hace que el navegador bloquee la web.
+# Un archivo que falta, vacío o cortado en el servidor hace que el navegador bloquee la web.
 if [ "${VERIFY:-yes}" = "yes" ]; then
-  log "Verificando los archivos publicados en $SITE_URL…"
-  cd "$CLONE_DIR/public"
-  BAD=0; CHECKED=0
-  while IFS= read -r rel; do
-    [ "$CHECKED" -lt "${VERIFY_MAX:-150}" ] || break
-    CHECKED=$((CHECKED + 1))
-    LOCAL_SUM="$(sha256sum < "$rel" | cut -d' ' -f1)"
-    REMOTE_SUM="$(curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "${SITE_URL}${rel}" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
-    if [ "$LOCAL_SUM" != "$REMOTE_SUM" ]; then
-      log "  NO COINCIDE: $rel (local: $(wc -c < "$rel") bytes)"
-      BAD=$((BAD + 1))
-    fi
-  done < <(find . -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' \) | sed 's#^\./##' | sort)
-  cd "$CLONE_DIR"
+  verify_site
   if [ "$BAD" -ne 0 ]; then
     log "Pistas: si por FTPS el archivo tiene el tamaño correcto pero por HTTP se sirve mal, la causa"
     log "es una caché del servidor web (pide que la vacíen). Si ya está mal por FTPS, es la subida."
