@@ -6,10 +6,9 @@
 
 University of Granada
 
-[![Website](https://img.shields.io/badge/Website-cvr--lab.github.io-1261FF?style=for-the-badge&logo=googlechrome&logoColor=white)](https://cvr-lab.github.io/)
+[![Website](https://img.shields.io/badge/Website-CVR_LAB-1261FF?style=for-the-badge&logo=googlechrome&logoColor=white)](https://www.ugr.es/~cvrlab/)
 
 [![Built with Hugo](https://img.shields.io/badge/Built_with-Hugo-FF4088?logo=hugo&logoColor=white)](https://gohugo.io)
-[![Hosted on GitHub Pages](https://img.shields.io/badge/Hosted_on-GitHub_Pages-222222?logo=github&logoColor=white)](https://pages.github.com)
 
 </div>
 
@@ -19,19 +18,19 @@ University of Granada
 
 This repository contains the source of the website of the **Computer Vision and Robotics Lab (CVR Lab)** at the University of Granada. The site presents the lab's research, projects, publications, team and news.
 
-It is built with [Hugo](https://gohugo.io) and the [HugoBlox kit](https://github.com/HugoBlox/kit), and published automatically with GitHub Pages.
+It is built with [Hugo](https://gohugo.io) and the [HugoBlox kit](https://github.com/HugoBlox/kit).
 
 ## 🌐 Visit the website
 
-**<https://cvr-lab.github.io/>**
+**<https://www.ugr.es/~cvrlab/>**
 
 | Section | What you will find |
 | --- | --- |
-| [Projects](https://cvr-lab.github.io/projects/) | Research and development projects of the lab |
-| [Publications](https://cvr-lab.github.io/publications/) | Papers and scientific output, with citation and PDF links |
-| [People](https://cvr-lab.github.io/people/) | Researchers and students of the lab |
-| [News](https://cvr-lab.github.io/blog/) | Latest news and announcements |
-| [Contact](https://cvr-lab.github.io/contact/) | How to get in touch and how to find us |
+| [Projects](https://www.ugr.es/~cvrlab/projects/) | Research and development projects of the lab |
+| [Publications](https://www.ugr.es/~cvrlab/publications/) | Papers and scientific output, with citation and PDF links |
+| [People](https://www.ugr.es/~cvrlab/people/) | Researchers and students of the lab |
+| [News](https://www.ugr.es/~cvrlab/blog/) | Latest news and announcements |
+| [Contact](https://www.ugr.es/~cvrlab/contact/) | How to get in touch and how to find us |
 
 ## 🔬 Research areas
 
