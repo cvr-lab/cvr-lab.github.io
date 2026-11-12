@@ -5,7 +5,7 @@ PROJECT_NAME="${1:-}"
 BASE_BRANCH="main"
 REMOTE="origin"
 REPO_URL="https://github.com/cvr-lab/cvr-lab-website"
-PROJECT_DIR="content/projects/$PROJECT_NAME"
+PROJECT_DIR="../content/projects/$PROJECT_NAME"
 BRANCH="add-project-$PROJECT_NAME"
 
 info() {

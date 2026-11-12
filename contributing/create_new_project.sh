@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECTS_DIR="$ROOT_DIR/content/projects"
-TEMPLATE="$ROOT_DIR/scripts/templates/project-template.md"
+TEMPLATE="$ROOT_DIR/contributing/templates/project-template.md"
 
 usage() {
     echo "Usage:"
