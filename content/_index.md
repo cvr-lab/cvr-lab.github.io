@@ -77,7 +77,7 @@ sections:
           tag: Drones
       default_button_index: 0
       archive:
-        link: /projects/
+        link: projects/
         text: All projects
     design:
       columns: 3
@@ -94,7 +94,7 @@ sections:
       order: desc
       archive:
         enable: true
-        link: /blog/
+        link: blog/
         text: All news
     design:
       view: date-title-summary
