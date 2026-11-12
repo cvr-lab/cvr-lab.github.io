@@ -5,7 +5,8 @@ PROJECT_NAME="${1:-}"
 BASE_BRANCH="main"
 REMOTE="origin"
 REPO_URL="https://github.com/cvr-lab/cvr-lab-website"
-PROJECT_DIR="../content/projects/$PROJECT_NAME"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PROJECT_DIR="$REPO_ROOT/content/projects/$PROJECT_NAME"
 BRANCH="add-project-$PROJECT_NAME"
 
 info() {
@@ -55,10 +56,19 @@ CHANGES=$(git status --porcelain --untracked-files=all)
 [[ -n "$CHANGES" ]] \
     || error "No pending changes found."
 
-UNRELATED=$(printf '%s\n' "$CHANGES" | grep -vF "$PROJECT_DIR/" || true)
+PROJECT_RELATIVE="content/projects/$PROJECT_NAME/"
+
+UNRELATED=$(git status --porcelain --untracked-files=all |
+    awk -v prefix="$PROJECT_RELATIVE" '
+    {
+        path = substr($0, 4)
+        if (substr(path, 1, length(prefix)) != prefix) {
+            print
+        }
+    }')
 
 [[ -z "$UNRELATED" ]] \
-    || error "There are changes outside $PROJECT_DIR. Please commit or discard them first."
+    || error "There are changes outside $PROJECT_RELATIVE. Please commit or discard them first."
 
 # Update main
 info "Updating local main branch..."
