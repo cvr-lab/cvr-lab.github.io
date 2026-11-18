@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Profile of a lab member.
+# Created by contributing/create_new_person.sh: replace every line that says TODO.
+# The name of this file (<slug>.yaml) is the slug, and the photo has the same name
+# (assets/media/authors/<slug>.jpg).
+# ─────────────────────────────────────────────────────────────────────────────
+schema: hugoblox/author/v1
+slug: __SLUG__
+
+# `display` is the name exactly as it must be written in the `authors:` list of projects,
+# publications and news. If it does not match, the person is not linked.
+name:
+  display: "__NAME__"
+  given: "__GIVEN__"
+  family: "__FAMILY__"     # used to sort people; with two surnames, write both
+
+# Shown in bold on the card, for example: PhD Student in Computer Engineering
+role: "__ROLE__"
+
+# Biography. The card shows only the first two lines; the personal page shows all of it.
+bio: "__BIO__"
+
+# The first one is shown on the card.
+affiliations:
+- name: Universidad de Granada
+  url: https://www.ugr.es/
+
+# One entry per link: icons on the card and buttons on the personal page.
+links:
+- icon: at-symbol
+  url: mailto:__EMAIL__
+# - icon: academicons/google-scholar
+#   url: https://scholar.google.com/citations?user=XXXXXXXX
+# - icon: academicons/orcid
+#   url: https://orcid.org/0000-0000-0000-0000
+# - icon: brands/github
+#   url: https://github.com/USERNAME
+# - icon: brands/linkedin
+#   url: https://www.linkedin.com/in/USERNAME/
+
+# Optional.
+
+# interests:
+# - Computer Vision 
+# - Machine Learning
+# - Robotics
+
+# education:
+# - degree: PhD in Computer Engineering
+#   institution: Universidad de Granada
+#   end: '2024-12-31'
+
+# Group of /people/ where the card goes. It must be exactly one of the groups listed in
+# content/people/index.md (for example: Principal Investigators, Researchers, Grad Students,
+# Administration, Visitors, Alumni). A group that is NOT listed there hides the person
+# from /people/ (we use "Hidden" for former members).
+user_groups:
+- __GROUP__
+
+# Order inside the group (lower number goes first).
+weight: __WEIGHT__
