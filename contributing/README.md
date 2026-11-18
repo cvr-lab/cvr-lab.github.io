@@ -243,7 +243,10 @@ authors:
 
 For **automatic publication import**, also add the person to `scripts/publications/sources.yaml`
 with their ORCID, using the same name as in the profile. From then on their new papers are
-proposed every week in a PR for review.
+proposed every week in a PR for review. We have to include the new person in `scripts/publications/sources.yaml`
+after we launch `submit_person.sh`. Ideally, this action should be done by a maintainer,
+who should have a better understanding of the environment and know how to verify that the 
+jobs are being imported correctly.
 
 **Check:** open `/authors/<slug>/` and confirm that the expected projects and publications are
 listed. If one is missing, its `authors:` name does not match the profile.
