@@ -636,12 +636,13 @@ def run(cfg: dict, works: dict, existing: Existing, new_bib: Path,
         own_excl = [(k, term_regex(k)) for m in here for k in (m.get("exclude_keywords") or [])]
 
         score, reasons = score_work(w, title, len(set(lab)), cfg, thr, kw_res, topics, weak_res, excl_res + own_excl)
+        
         if doi in forced:            # include_dois: se propone aunque no llegue
-            score, reasons = max(score, threshold), reasons + ["incluida a mano"]
+            score, reasons = max(score, thr), reasons + ["incluida a mano"]
         rec = {"w": w, "title": title, "doi": doi, "authors": authors,
                "lab": sorted(set(lab)), "score": score, "reasons": reasons,
                "year": w.get("publication_year")}
-        if score >= threshold:
+        if score >= thr:
             accepted.append(rec)
         elif score >= 1:
             near.append(rec)
