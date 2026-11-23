@@ -63,5 +63,10 @@
   "added": "2026-10-30",
   "doi": "10.1088/1741-4326/ae511e",
   "title": "Remote handling operation for IFMIF-DONES supported by time-sensitive networking"
+ },
+ "https://openalex.org/W7236033017": {
+  "added": "2026-11-23",
+  "doi": "10.1016/j.cviu.2026.105008",
+  "title": "Ego-motion from event-inertial normal flow"
  }
 }
